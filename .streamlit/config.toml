@@ -1,0 +1,2 @@
+[server]
+maxUploadSize = 2000  # Iska matlab hai 2GB tak ki file upload ho sakti hai
