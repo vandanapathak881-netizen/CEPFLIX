@@ -1,76 +1,103 @@
 import streamlit as st
+import json
 import os
-import shutil
+import base64
 
-# 1. Folder Setup (Movies yaha save hongi)
-SAVE_DIR = "my_library"
-if not os.path.exists(SAVE_DIR):
-    os.makedirs(SAVE_DIR)
+# 1. Database Setup
+DB_FILE = "cepflix_db.json"
 
-st.set_page_config(page_title="Community OTT", layout="wide")
+def load_data():
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
 
+def save_data(data):
+    with open(DB_FILE, "w") as f:
+        json.dump(data, f)
+
+# Function to convert image to string (for permanent saving)
+def image_to_base64(image_file):
+    return base64.b64encode(image_file.getvalue()).decode()
+
+# Page Config
+st.set_page_config(page_title="CEPFLIX", layout="wide")
+
+# Premium CSS
 st.markdown("""
     <style>
     .stApp { background-color: #000000; color: white; }
-    .stSidebar { background-color: #111111; }
+    h1 { color: #E50914; font-family: 'Arial Black'; font-size: 60px; }
+    .stButton>button { background-color: #E50914; color: white; border: none; font-weight: bold; }
+    .stButton>button:hover { background-color: #ff1e26; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🌐 Our Shared Cinema")
+st.markdown("<h1>CEPFLIX</h1>", unsafe_allow_html=True)
 
-# --- SIDEBAR: PERMANENT UPLOAD ---
-st.sidebar.header("📤 Add to Public Library")
-new_name = st.sidebar.text_input("Movie Name")
-new_poster = st.sidebar.file_uploader("Upload Poster", type=["jpg", "png"])
-new_video = st.sidebar.file_uploader("Upload MP4 Video", type=["mp4"])
+# Load Data
+if 'movies' not in st.session_state:
+    st.session_state['movies'] = load_data()
 
-if st.sidebar.button("Save Permanently"):
-    if new_name and new_poster and new_video:
-        # Movie ka folder banana
-        movie_path = os.path.join(SAVE_DIR, new_name)
-        if not os.path.exists(movie_path):
-            os.makedirs(movie_path)
-            
-            # Saving Poster
-            with open(os.path.join(movie_path, "poster.png"), "wb") as f:
-                f.write(new_poster.getbuffer())
-            
-            # Saving Video
-            with open(os.path.join(movie_path, "video.mp4"), "wb") as f:
-                f.write(new_video.getbuffer())
+# --- SIDEBAR: ADMIN ---
+st.sidebar.title("🛠 Admin Panel")
+auth = st.sidebar.text_input("Password", type="password")
+
+if auth == "amrit":
+    st.sidebar.success("Welcome, Amrit!")
+    with st.sidebar.expander("Add New Movie", expanded=True):
+        t = st.text_input("Movie Name")
+        p = st.file_uploader("Upload Poster (Image)", type=["jpg", "png", "jpeg"])
+        v = st.text_input("Video URL (Direct MP4 Link)")
+        
+        if st.button("Add to CEPFLIX"):
+            if t and p and v:
+                # Poster ko text mein badalna taaki save ho sake
+                img_str = image_to_base64(p)
+                new_movie = {"title": t, "poster": img_str, "video": v}
                 
-            st.sidebar.success(f"'{new_name}' save ho gayi hai!")
-            st.rerun() # Refresh to show new movie
-        else:
-            st.sidebar.error("Ye naam pehle se maujood hai.")
+                st.session_state['movies'].append(new_movie)
+                save_data(st.session_state['movies'])
+                st.sidebar.success(f"'{t}' Saved Permanently!")
+                st.rerun()
+            else:
+                st.sidebar.error("Bhai, sab kuch bharna zaruri hai!")
 
-# --- MAIN INTERFACE: LOAD FROM FOLDER ---
-all_movies = os.listdir(SAVE_DIR)
+    if st.sidebar.button("Delete All"):
+        save_data([])
+        st.session_state['movies'] = []
+        st.rerun()
 
-if not all_movies:
-    st.info("Library khali hai. Sidebar se movies add karein.")
+# --- MAIN UI ---
+if not st.session_state['movies']:
+    st.info("👋 Welcome! Library khali hai. Sidebar se poster upload karein aur video link dalein.")
 else:
-    choice = st.selectbox("Select Movie", all_movies)
+    titles = [m['title'] for m in st.session_state['movies']]
+    choice = st.selectbox("Search Movie:", titles)
+    
+    selected = next(m for m in st.session_state['movies'] if m['title'] == choice)
+    
+    st.divider()
     
     col1, col2 = st.columns([1, 2.5])
     
-    movie_folder = os.path.join(SAVE_DIR, choice)
-    video_file = os.path.join(movie_folder, "video.mp4")
-    poster_file = os.path.join(movie_folder, "poster.png")
-
     with col1:
-        st.image(poster_file, use_container_width=True)
-    
+        # Displaying the uploaded poster
+        st.image(f"data:image/png;base64,{selected['poster']}", width='stretch')
+        st.subheader(selected['title'])
+        
     with col2:
-        st.subheader(f"Now Streaming: {choice}")
-        st.video(video_file)
+        st.video(selected['video'])
+        st.caption(f"Streaming: {selected['title']}")
 
     # Gallery
     st.divider()
-    st.write("### All Movies")
+    st.subheader("Your Library")
     cols = st.columns(6)
-    for i, m in enumerate(all_movies):
+    for i, m in enumerate(st.session_state['movies']):
         with cols[i % 6]:
-            p_path = os.path.join(SAVE_DIR, m, "poster.png")
-            st.image(p_path, caption=m)
-  
+            st.image(f"data:image/png;base64,{m['poster']}", caption=m['title'], width='stretch')
+                
